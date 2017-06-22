@@ -165,7 +165,7 @@ const uploadFile = (file, bucket, key) => {
         });
         upload.on('error', function(err) {
             debug(`Upload failed for file ${file} error: ${err.message}`);
-            reject(err);
+            resolve(err);
         });
         upload.on('progress', function() {
             Debug('converter:progress')(`Upload progress ${upload.progressMd5Amount} ${upload.progressAmount} ${upload.progressTotal}`);
