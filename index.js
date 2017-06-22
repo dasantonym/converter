@@ -178,13 +178,13 @@ const uploadFile = (file, bucket, key) => {
 };
 
 const makeS3Key = (file) => {
-    file = file.replace(config.outpath + '/', '');
-    let extname = path.extname(file),
-        basename = path.basename(file, extname),
-        dirname = path.dirname(file).split('/').splice(0,3);
-    dirname = dirname.map(elem => { return slug(elem); }).join('/');
+    let newpath = file.replace(config.outPath + '/', ''),
+        extname = path.extname(newpath),
+        basename = path.basename(newpath, extname),
+        dirname = path.dirname(newpath).split('/').splice(0,3);
+    dirname = dirname.map(elem => { return slug(elem, { lower: true, replacement: '_' }); }).join('/');
     return md5file(file).then(checksum => {
-        return `${dirname}/${basename}-${checksum}${extname}`;
+        return `${dirname}/${slug(basename, { lower: true, replacement: '_' })}-${checksum}${extname}`;
     });
 };
 
