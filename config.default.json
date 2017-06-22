@@ -1,0 +1,10 @@
+{
+  "concurrency": 1,
+  "audioCodec": "libfdk_aac",
+  "audioCodec1": "libvo_aacenc",
+  "extensions": [".mov", ".mts", ".mxf"],
+  "basePath": "/Volumes/video/in",
+  "outPath": "/Volumes/video/out",
+  "ffmpeg": "ffmpeg",
+  "ffprobe": "ffprobe"
+}
