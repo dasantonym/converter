@@ -3,7 +3,7 @@ import Debug from 'debug';
 import path from 'path';
 import Promise from 'bluebird';
 import { spawn } from 'child_process';
-import s3 from 's3';
+import knox from 'knox';
 import slug from 'slug';
 import md5file from 'md5-file/promise';
 
@@ -13,11 +13,10 @@ const debug = Debug('converter'),
     filesToDo = [],
     filesErrored = [];
 
-const s3client = s3.createClient({
-    s3Options: {
-        accessKeyId: config.s3key,
-        secretAccessKey: config.s3secret
-    }
+const s3client = knox.createClient({
+    key: config.s3key,
+    secret: config.s3secret,
+    bucket: config.s3bucket
 });
 
 const parseEntry = function (fname) {
@@ -41,15 +40,19 @@ const parseEntry = function (fname) {
         });
 };
 
+const sanitizePath = (filepath) => {
+    return filepath.replace(/\s/g, '\\ ').replace(/&/g, '\\&');
+};
+
 const getMP4Command = (inFile, outFile, audioCodec) => {
-    return `${config.ffmpeg} -y -i ${inFile.replace(/\s/g, '\\ ')} -acodec ${audioCodec} -b:a 192k ` +
+    return `${config.ffmpeg} -y -i ${sanitizePath(inFile)} -acodec ${audioCodec} -b:a 192k ` +
         `-vcodec libx264 -vf scale=960:-1 -pix_fmt yuv420p -profile:v baseline -level 3 ` +
-        `-strict -2 ${outFile.replace(/\s/g, '\\ ')}`;
+        `-strict -2 ${sanitizePath(outFile)}`;
 };
 
 const getWebmCommand = (inFile, outFile) => {
-    return `${config.ffmpeg} -y -i ${inFile.replace(/\s/g, '\\ ')} -vcodec libvpx-vp9 -vf scale=960:-1 -b:v 1M ` +
-        `-acodec libvorbis ${outFile.replace(/\s/g, '\\ ')}`;
+    return `${config.ffmpeg} -y -i ${sanitizePath(inFile)} -vcodec libvpx-vp9 -vf scale=960:-1 -b:v 1M ` +
+        `-acodec libvorbis ${sanitizePath(outFile)}`;
 };
 
 const processFile = (inFile, outFile, command) => {
@@ -120,7 +123,7 @@ const processFile = (inFile, outFile, command) => {
 const getDuration = (inFile) => {
     return new Promise((resolve, reject) => {
         let stdout = '', stderr = '';
-        const probe = spawn(config.ffprobe, [inFile.replace(/\s/g, '\\ ')], { shell: true });
+        const probe = spawn(config.ffprobe, [sanitizePath(inFile)], { shell: true });
         probe.stdout.on('data', (data) => {
             stdout += data.toString();
         });
@@ -156,23 +159,16 @@ const isDurationEqual = (dur1, dur2, toleranceSec = 0, toleranceMin = 0, toleran
 
 const uploadFile = (file, bucket, key) => {
     return new Promise((resolve, reject) => {
-        const upload = s3client.uploadFile({
-            localFile: file,
-            s3Params: {
-                Bucket: bucket,
-                Key: key
+        s3client.putFile(file, key, function(err, res){
+            if (err) {
+                debug(`Upload failed for file ${file} error: ${err.message}`);
+                return resolve(err);
             }
-        });
-        upload.on('error', function(err) {
-            debug(`Upload failed for file ${file} error: ${err.message}`);
-            resolve(err);
-        });
-        upload.on('progress', function() {
-            Debug('converter:progress')(`Upload progress ${upload.progressMd5Amount} ${upload.progressAmount} ${upload.progressTotal}`);
-        });
-        upload.on('end', function() {
-            debug(`Upload completed for file ${file}`);
-            resolve();
+            if (res.complete) {
+                resolve(res);
+            } else {
+                res.resume();
+            }
         });
     });
 };
