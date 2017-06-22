@@ -6,5 +6,9 @@
   "basePath": "/Volumes/video/in",
   "outPath": "/Volumes/video/out",
   "ffmpeg": "ffmpeg",
-  "ffprobe": "ffprobe"
+  "ffprobe": "ffprobe",
+  "s3upload": false,
+  "s3key": "asdf",
+  "s3secret": "asdf",
+  "s3bucket": "bucketname"
 }

@@ -3,12 +3,22 @@ import Debug from 'debug';
 import path from 'path';
 import Promise from 'bluebird';
 import { spawn } from 'child_process';
+import s3 from 's3';
+import slug from 'slug';
+import md5file from 'md5-file/promise';
 
 import * as config from './config.json';
 
 const debug = Debug('converter'),
     filesToDo = [],
     filesErrored = [];
+
+const s3client = s3.createClient({
+    s3Options: {
+        accessKeyId: config.s3key,
+        secretAccessKey: config.s3secret
+    }
+});
 
 const parseEntry = function (fname) {
     if (path.basename(fname).substr(0,1) === '.') {
@@ -135,6 +145,40 @@ const getDuration = (inFile) => {
     });
 };
 
+const uploadFile = (file, bucket, key) => {
+    return new Promise((resolve, reject) => {
+        const upload = s3client.uploadFile({
+            localFile: file,
+            s3Params: {
+                Bucket: bucket,
+                key: key
+            }
+        });
+        upload.on('error', function(err) {
+            debug(`Upload failed for file ${file} error: ${err.message}`);
+            reject(err);
+        });
+        upload.on('progress', function() {
+            Debug('converter:progress')(`Upload progress ${uploader.progressMd5Amount} ${uploader.progressAmount} ${uploader.progressTotal}`);
+        });
+        upload.on('end', function() {
+            debug(`Upload completed for file ${file}`);
+            resolve();
+        });
+    });
+};
+
+const makeS3Key = (file) => {
+    file = file.replace(config.outpath, '');
+    let extname = path.extname(file),
+        basename = path.basename(file, extname),
+        dirname = path.dirname(file).split('/').splice(0,3);
+    dirname = dirname.map(elem => { return slug(elem); }).join('/');
+    return md5file(file).then(checksum => {
+        return `${dirname}/${basename}-${checksum}${extname}`;
+    });
+};
+
 parseEntry(config.basePath)
 .then(() => {
     return Promise.map(filesToDo, file => {
@@ -149,15 +193,35 @@ parseEntry(config.basePath)
             })
             .then(exists => {
                 _exists = exists;
+                const outfile = path.join(pathName, `${baseName}.webm`);
                 if (!_exists) {
-                    const outfile = path.join(pathName, `${baseName}.webm`);
-                    return processFile(file, outfile, getWebmCommand(file, outfile));
+                    return processFile(file, outfile, getWebmCommand(file, outfile))
+                        .then(() => {
+                            return outfile;
+                        });
+                }
+                return outfile;
+            })
+            .then(outfile => {
+                if (config.s3upload) {
+                    return makeS3Key(outfile)
+                        .then(key => uploadFile(outfile, config.s3bucket, key));
                 }
             })
             .then(() => {
+                const outfile = path.join(pathName, `${baseName}.mp4`);
                 if (!_exists) {
-                    const outfile = path.join(pathName, `${baseName}.mp4`);
-                    return processFile(file, outfile, getMP4Command(file, outfile, config.audioCodec));
+                    return processFile(file, outfile, getMP4Command(file, outfile, config.audioCodec))
+                        .then(() => {
+                            return outfile;
+                        });
+                }
+                return outfile;
+            })
+            .then(outfile => {
+                if (config.s3upload) {
+                    return makeS3Key(outfile)
+                        .then(key => uploadFile(outfile, config.s3bucket, key));
                 }
             });
     }, {concurrency: config.concurrency});
