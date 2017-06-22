@@ -80,7 +80,7 @@ const processFile = (inFile, outFile, command) => {
                             debug(`Unequal durations IN: ${durationIn} OUT: ${durationOut}`);
                         }
                     }
-                    return durationIn === durationOut;
+                    return isDurationEqual(durationIn, durationOut, 1);
                 });
         })
         .then(exists => {
@@ -139,10 +139,19 @@ const getDuration = (inFile) => {
             }
             const timecode = lines.length >= 2 ? lines[0].split(', ')[0].split(': ')[1] : undefined;
             debug(stdout);
-            resolve(typeof timecode === 'string' ? timecode.split('.')[0] : timecode);
+            resolve(typeof timecode === 'string' ? timecode.split('.')[0].split(':').map(elem => { return parseInt(elem); }) : timecode);
             probe.stdin.end();
         });
     });
+};
+
+const isDurationEqual = (dur1, dur2, toleranceSec = 0, toleranceMin = 0, toleranceHour = 0) => {
+    if (!Array.isArray(dur1) || !Array.isArray(dur2)) {
+        return false;
+    }
+    return Math.abs(dur1[0] - dur2[0]) <= toleranceHour &&
+        Math.abs(dur1[1] - dur2[1]) <= toleranceMin &&
+        Math.abs(dur1[2] - dur2[2]) <= toleranceSec;
 };
 
 const uploadFile = (file, bucket, key) => {
@@ -151,7 +160,7 @@ const uploadFile = (file, bucket, key) => {
             localFile: file,
             s3Params: {
                 Bucket: bucket,
-                key: key
+                Key: key
             }
         });
         upload.on('error', function(err) {
@@ -159,7 +168,7 @@ const uploadFile = (file, bucket, key) => {
             reject(err);
         });
         upload.on('progress', function() {
-            Debug('converter:progress')(`Upload progress ${uploader.progressMd5Amount} ${uploader.progressAmount} ${uploader.progressTotal}`);
+            Debug('converter:progress')(`Upload progress ${upload.progressMd5Amount} ${upload.progressAmount} ${upload.progressTotal}`);
         });
         upload.on('end', function() {
             debug(`Upload completed for file ${file}`);
