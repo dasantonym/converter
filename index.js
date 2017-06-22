@@ -178,7 +178,7 @@ const uploadFile = (file, bucket, key) => {
 };
 
 const makeS3Key = (file) => {
-    file = file.replace(config.outpath, '');
+    file = file.replace(config.outpath + '/', '');
     let extname = path.extname(file),
         basename = path.basename(file, extname),
         dirname = path.dirname(file).split('/').splice(0,3);
