@@ -32,13 +32,13 @@ const parseEntry = function (fname) {
 };
 
 const getMP4Command = (inFile, outFile, audioCodec) => {
-    return `${config.ffmpeg} -an -i ${inFile.replace(/\s/g, '\\ ')} -acodec ${audioCodec} -b:a 192k ` +
+    return `${config.ffmpeg} -y -i ${inFile.replace(/\s/g, '\\ ')} -acodec ${audioCodec} -b:a 192k ` +
         `-vcodec libx264 -vf scale=960:-1 -pix_fmt yuv420p -profile:v baseline -level 3 ` +
         `-strict -2 ${outFile.replace(/\s/g, '\\ ')}`;
 };
 
 const getWebmCommand = (inFile, outFile) => {
-    return `${config.ffmpeg} -i ${inFile.replace(/\s/g, '\\ ')} -vcodec libvpx-vp9 -vf scale=960:-1 -b:v 1M ` +
+    return `${config.ffmpeg} -y -i ${inFile.replace(/\s/g, '\\ ')} -vcodec libvpx-vp9 -vf scale=960:-1 -b:v 1M ` +
         `-acodec libvorbis ${outFile.replace(/\s/g, '\\ ')}`;
 };
 
