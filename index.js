@@ -6,6 +6,13 @@ import { spawn } from 'child_process';
 import s3 from 's3';
 import slug from 'slug';
 import md5file from 'md5-file/promise';
+import ffmpeg from 'fluent-ffmpeg';
+import random from 'secure-random';
+import sharp from 'sharp';
+import fileType from 'file-type';
+import readChunk from 'read-chunk';
+import gm from 'gm';
+import crypto from 'crypto';
 
 import * as config from './config.json';
 
@@ -195,12 +202,133 @@ const makeS3Key = (file) => {
         basename = path.basename(newpath, extname),
         dirname = path.dirname(newpath).split('/').splice(0,3);
     dirname = dirname.map(elem => { return slug(elem, { lower: true, replacement: '_' }); }).join('/');
+    const checksum = crypto.createHash('md5').update(file).digest('hex');
+    return `${dirname}/${slug(basename, { lower: true, replacement: '_' })}-${checksum}${extname}`;
+    /*
     return md5file(file).then(checksum => {
         return `${dirname}/${slug(basename, { lower: true, replacement: '_' })}-${checksum}${extname}`;
     });
+    */
+};
+
+const getThumbNail = (file) => {
+    const gifFolder = path.join(path.dirname(file), random.randomBuffer(8).toString('hex'));
+    return fs.ensureDir(gifFolder)
+        .then(() => {
+            debug('Extract screenshots with ffmpeg');
+            return new Promise((resolve, reject) => {
+                ffmpeg(file).screenshots({
+                    count: 50,
+                    folder: gifFolder
+                })
+                .on('filenames', (fnms) => {
+                    debug('Extracting ' + fnms.length + ' sample frames...')
+                })
+                .on('end', () => {
+                    debug('Extract screenshots complete');
+                    resolve();
+                })
+                .on('error', (err) => {
+                    debug('Extract screenshots failed: %s', err.message);
+                    reject(err);
+                });
+            });
+        })
+        .then(() => {
+            let entries = fs.readdirSync(gifFolder);
+
+            for (let i in entries) {
+                debug('Read GIF folder and get file types');
+                let buffer = readChunk.sync(path.join(gifFolder, entries[i]), 0, 262),
+                    type = fileType(buffer);
+
+                if (!type || type.mime !== 'image/png') {
+                    debug('Remove non png file with type: %o', type);
+                    fs.unlinkSync(path.join(gifFolder, entries[i]));
+                }
+            }
+
+            debug('Read GIF folder');
+            return Promise.map(fs.readdirSync(gifFolder), (entry) => {
+                return new Promise((rs, rj) => {
+                    debug('Resize screenshot');
+                    sharp(path.join(gifFolder, entry))
+                        .resize(320, 180, {
+                            kernel: sharp.kernel.cubic,
+                            interpolator: sharp.interpolator.nohalo
+                        })
+                        .crop()
+                        .toFile(path.join(gifFolder, 'sc-' + entry), (err) => {
+                            fs.unlinkSync(path.join(gifFolder, entry));
+                            if (err) {
+                                debug('Resize screenshot failed: %s', err.message);
+                                rj(err);
+                            } else {
+                                debug('Resize screenshot complete');
+                                rs();
+                            }
+                        });
+                });
+            }, {concurrency: 1})
+            .then(() => {
+                return new Promise((rs, rj) => {
+                    debug('Build preview GIF');
+                    gm(path.join(gifFolder, '*.png'))
+                        .delay(50).colors(64).write(path.join(path.dirname(file), path.basename(file, path.extname(file)) + '.gif'), (err) => {
+                        if (err) {
+                            debug('Build preview GIF failed: %s', err.message);
+                            rj(err);
+                        } else {
+                            debug('Remove GIF folder');
+                            if (fs.existsSync(gifFolder)) {
+                                fs.removeSync(gifFolder);
+                            }
+                            debug('Build preview GIF complete');
+                            rs(gifFolder + '.gif');
+                        }
+                    });
+                });
+            });
+        });
 };
 
 parseEntry(config.basePath)
+.then(() => {
+    if (!config.getFileInfo) {
+        return;
+    }
+    return Promise.map(filesToDo, file => {
+        return new Promise((resolve, reject) => {
+            const args = `-v quiet -print_format json -show_format -show_streams ${sanitizePath(file)}`.split(' ');
+            let stdout = '', stderr = '';
+            const probe = spawn(config.ffprobe, args, { shell: true });
+            probe.stdout.on('data', (data) => {
+                stdout += data.toString();
+            });
+            probe.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+            probe.on('close', (code) => {
+                if (code !== 0) {
+                    debug(`Error getting file info for ${file} with error: ${stderr}`);
+                    return resolve();
+                }
+                probe.stdin.end();
+                let outfile = file.replace(config.basePath, config.outPath);
+                outfile = path.join(path.dirname(outfile), path.basename(outfile, path.extname(outfile)) + '.json');
+                return fs.ensureDir(path.dirname(outfile))
+                    .then(() => {
+                        return fs.writeFile(outfile, stdout, err => {
+                            if (err) {
+                                debug(`Error writing file info to ${outfile} with error: ${stderr}`);
+                            }
+                            resolve();
+                        });
+                    });
+            });
+        });
+    }, {concurrency: config.concurrency});
+})
 .then(() => {
     return Promise.map(filesToDo, file => {
         debug(`Processing ${file}`);
@@ -215,7 +343,7 @@ parseEntry(config.basePath)
             .then(exists => {
                 _exists = exists;
                 const outfile = path.join(pathName, `${baseName}.webm`);
-                if (!_exists && config.encode) {
+                if (!_exists && config.encode && config.makeWebm) {
                     return processFile(file, outfile, getWebmCommand(file, outfile))
                         .then(() => {
                             return outfile;
@@ -249,13 +377,16 @@ parseEntry(config.basePath)
             })
             .then(() => {
                 const outfile = path.join(pathName, `${baseName}.mp4`);
-                if (!_exists && config.encode) {
+                if (!_exists && config.encode && config.makeMP4) {
                     return processFile(file, outfile, getMP4Command(file, outfile, config.audioCodec))
                         .then(() => {
                             return outfile;
                         });
                 }
                 return outfile;
+            })
+            .then(outfile => {
+                return getThumbNail(outfile);
             })
             .then(outfile => {
                 if (config.s3upload) {

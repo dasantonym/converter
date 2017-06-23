@@ -12,5 +12,8 @@
   "s3key": "asdf",
   "s3secret": "asdf",
   "s3bucket": "bucketname",
-  "fakes3upload": false
+  "fakes3upload": false,
+  "getFileInfo": false,
+  "makeWebm": false,
+  "makeMP4": true
 }
