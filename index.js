@@ -202,7 +202,7 @@ const makeS3Key = (file) => {
         basename = path.basename(newpath, extname),
         dirname = path.dirname(newpath).split('/').splice(0,3);
     dirname = dirname.map(elem => { return slug(elem, { lower: true, replacement: '_' }); }).join('/');
-    const checksum = crypto.createHash('md5').update(file).digest('hex');
+    const checksum = crypto.createHash('md5').update(dirname + basename).digest('hex');
     return Promise.resolve(`${dirname}/${slug(basename, { lower: true, replacement: '_' })}-${checksum}${extname}`);
     /*
     return md5file(file).then(checksum => {
