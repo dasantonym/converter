@@ -11,5 +11,6 @@
   "s3upload": false,
   "s3key": "asdf",
   "s3secret": "asdf",
-  "s3bucket": "bucketname"
+  "s3bucket": "bucketname",
+  "fakes3upload": false
 }

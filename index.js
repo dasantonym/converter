@@ -19,6 +19,7 @@ const s3client = s3.createClient({
         secretAccessKey: config.s3secret
     }
 });
+s3client.s3.addExpect100Continue = function() {};
 
 const parseEntry = function (fname) {
     if (path.basename(fname).substr(0,1) === '.') {
@@ -181,6 +182,13 @@ const uploadFile = (file, bucket, key) => {
     });
 };
 
+const fakeUploadFile = (file, bucket, key) => {
+    return fs.ensureDir(path.dirname(path.join(config.outPath, key)))
+    .then(() => {
+        return fs.copy(file, path.join(config.outPath, key));
+    });
+};
+
 const makeS3Key = (file) => {
     let newpath = file.replace(config.outPath + '/', ''),
         extname = path.extname(newpath),
@@ -227,6 +235,17 @@ parseEntry(config.basePath)
                                 .then(key => uploadFile(outfile, config.s3bucket, key));
                         });
                 }
+                if (config.fakes3upload) {
+                    return fs.exists(file)
+                        .then(exists => {
+                            if (!exists) {
+                                debug(`Not fake-uploading non-existant file: ${file}`);
+                                return;
+                            }
+                            return makeS3Key(outfile)
+                                .then(key => fakeUploadFile(outfile, config.s3bucket, key));
+                        });
+                }
             })
             .then(() => {
                 const outfile = path.join(pathName, `${baseName}.mp4`);
@@ -248,6 +267,17 @@ parseEntry(config.basePath)
                             }
                             return makeS3Key(outfile)
                                 .then(key => uploadFile(outfile, config.s3bucket, key));
+                        });
+                }
+                if (config.fakes3upload) {
+                    return fs.exists(file)
+                        .then(exists => {
+                            if (!exists) {
+                                debug(`Not fake-uploading non-existant file: ${file}`);
+                                return;
+                            }
+                            return makeS3Key(outfile)
+                                .then(key => fakeUploadFile(outfile, config.s3bucket, key));
                         });
                 }
             });
