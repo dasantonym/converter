@@ -3,7 +3,7 @@ import Debug from 'debug';
 import path from 'path';
 import Promise from 'bluebird';
 import { spawn } from 'child_process';
-import knox from 'knox';
+import s3 from 's3';
 import slug from 'slug';
 import md5file from 'md5-file/promise';
 
@@ -13,10 +13,11 @@ const debug = Debug('converter'),
     filesToDo = [],
     filesErrored = [];
 
-const s3client = knox.createClient({
-    key: config.s3key,
-    secret: config.s3secret,
-    bucket: config.s3bucket
+const s3client = s3.createClient({
+    s3Options: {
+        accessKeyId: config.s3key,
+        secretAccessKey: config.s3secret
+    }
 });
 
 const parseEntry = function (fname) {
@@ -158,26 +159,26 @@ const isDurationEqual = (dur1, dur2, toleranceSec = 0, toleranceMin = 0, toleran
 };
 
 const uploadFile = (file, bucket, key) => {
-    return fs.exists(file)
-        .then(exists => {
-            if (!exists) {
-                debug(`Not uploading non-existant file: ${file}`);
-                return;
+    return new Promise((resolve, reject) => {
+        const upload = s3client.uploadFile({
+            localFile: file,
+            s3Params: {
+                Bucket: bucket,
+                Key: key
             }
-            return new Promise((resolve, reject) => {
-                s3client.putFile(file, key, function(err, res){
-                    if (err) {
-                        debug(`Upload failed for file ${file} error: ${err.message}`);
-                        return resolve(err);
-                    }
-                    if (res.complete) {
-                        resolve(res);
-                    } else {
-                        res.resume();
-                    }
-                });
-            });
         });
+        upload.on('error', function(err) {
+            debug(`Upload failed for file ${file} error: ${err.message}`);
+            resolve(err);
+        });
+        upload.on('progress', function() {
+            Debug('converter:progress')(`Upload progress ${upload.progressMd5Amount} ${upload.progressAmount} ${upload.progressTotal}`);
+        });
+        upload.on('end', function() {
+            debug(`Upload completed for file ${file}`);
+            resolve();
+        });
+    });
 };
 
 const makeS3Key = (file) => {
