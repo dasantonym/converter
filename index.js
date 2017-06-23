@@ -158,19 +158,26 @@ const isDurationEqual = (dur1, dur2, toleranceSec = 0, toleranceMin = 0, toleran
 };
 
 const uploadFile = (file, bucket, key) => {
-    return new Promise((resolve, reject) => {
-        s3client.putFile(file, key, function(err, res){
-            if (err) {
-                debug(`Upload failed for file ${file} error: ${err.message}`);
-                return resolve(err);
+    return fs.exists(file)
+        .then(exists => {
+            if (!exists) {
+                debug(`Not uploading non-existant file: ${file}`);
+                return;
             }
-            if (res.complete) {
-                resolve(res);
-            } else {
-                res.resume();
-            }
+            return new Promise((resolve, reject) => {
+                s3client.putFile(file, key, function(err, res){
+                    if (err) {
+                        debug(`Upload failed for file ${file} error: ${err.message}`);
+                        return resolve(err);
+                    }
+                    if (res.complete) {
+                        resolve(res);
+                    } else {
+                        res.resume();
+                    }
+                });
+            });
         });
-    });
 };
 
 const makeS3Key = (file) => {
@@ -199,7 +206,7 @@ parseEntry(config.basePath)
             .then(exists => {
                 _exists = exists;
                 const outfile = path.join(pathName, `${baseName}.webm`);
-                if (!_exists) {
+                if (!_exists && config.encode) {
                     return processFile(file, outfile, getWebmCommand(file, outfile))
                         .then(() => {
                             return outfile;
@@ -209,13 +216,20 @@ parseEntry(config.basePath)
             })
             .then(outfile => {
                 if (config.s3upload) {
-                    return makeS3Key(outfile)
-                        .then(key => uploadFile(outfile, config.s3bucket, key));
+                    return fs.exists(file)
+                        .then(exists => {
+                            if (!exists) {
+                                debug(`Not uploading non-existant file: ${file}`);
+                                return;
+                            }
+                            return makeS3Key(outfile)
+                                .then(key => uploadFile(outfile, config.s3bucket, key));
+                        });
                 }
             })
             .then(() => {
                 const outfile = path.join(pathName, `${baseName}.mp4`);
-                if (!_exists) {
+                if (!_exists && config.encode) {
                     return processFile(file, outfile, getMP4Command(file, outfile, config.audioCodec))
                         .then(() => {
                             return outfile;
@@ -225,8 +239,15 @@ parseEntry(config.basePath)
             })
             .then(outfile => {
                 if (config.s3upload) {
-                    return makeS3Key(outfile)
-                        .then(key => uploadFile(outfile, config.s3bucket, key));
+                    return fs.exists(file)
+                        .then(exists => {
+                            if (!exists) {
+                                debug(`Not uploading non-existant file: ${file}`);
+                                return;
+                            }
+                            return makeS3Key(outfile)
+                                .then(key => uploadFile(outfile, config.s3bucket, key));
+                        });
                 }
             });
     }, {concurrency: config.concurrency});

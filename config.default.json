@@ -1,5 +1,6 @@
 {
   "concurrency": 1,
+  "encode": true,
   "audioCodec": "libfdk_aac",
   "audioCodec1": "libvo_aacenc",
   "extensions": [".mov", ".mts", ".mxf"],
