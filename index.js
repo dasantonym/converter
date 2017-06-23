@@ -203,7 +203,7 @@ const makeS3Key = (file) => {
         dirname = path.dirname(newpath).split('/').splice(0,3);
     dirname = dirname.map(elem => { return slug(elem, { lower: true, replacement: '_' }); }).join('/');
     const checksum = crypto.createHash('md5').update(file).digest('hex');
-    return `${dirname}/${slug(basename, { lower: true, replacement: '_' })}-${checksum}${extname}`;
+    return Promise.resolve(`${dirname}/${slug(basename, { lower: true, replacement: '_' })}-${checksum}${extname}`);
     /*
     return md5file(file).then(checksum => {
         return `${dirname}/${slug(basename, { lower: true, replacement: '_' })}-${checksum}${extname}`;
