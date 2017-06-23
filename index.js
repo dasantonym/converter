@@ -386,7 +386,9 @@ parseEntry(config.basePath)
                 return outfile;
             })
             .then(outfile => {
-                return getThumbNail(outfile);
+                if (config.makeThumbs) {
+                    return getThumbNail(outfile);
+                }
             })
             .then(outfile => {
                 if (config.s3upload) {

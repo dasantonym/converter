@@ -15,5 +15,6 @@
   "fakes3upload": false,
   "getFileInfo": false,
   "makeWebm": false,
-  "makeMP4": true
+  "makeMP4": true,
+  "makeThumbs": false
 }
