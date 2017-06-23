@@ -352,7 +352,7 @@ parseEntry(config.basePath)
                 return outfile;
             })
             .then(outfile => {
-                if (config.s3upload) {
+                if (config.s3upload && config.makeWebm) {
                     return fs.exists(file)
                         .then(exists => {
                             if (!exists) {
@@ -363,7 +363,7 @@ parseEntry(config.basePath)
                                 .then(key => uploadFile(outfile, config.s3bucket, key));
                         });
                 }
-                if (config.fakes3upload) {
+                if (config.fakes3upload && config.makeWebm) {
                     return fs.exists(file)
                         .then(exists => {
                             if (!exists) {
@@ -395,7 +395,7 @@ parseEntry(config.basePath)
                 return outfile;
             })
             .then(outfile => {
-                if (config.s3upload) {
+                if (config.s3upload && config.makeMP4) {
                     return fs.exists(file)
                         .then(exists => {
                             if (!exists) {
@@ -406,7 +406,7 @@ parseEntry(config.basePath)
                                 .then(key => uploadFile(outfile, config.s3bucket, key));
                         });
                 }
-                if (config.fakes3upload) {
+                if (config.fakes3upload && config.makeMP4) {
                     return fs.exists(file)
                         .then(exists => {
                             if (!exists) {
